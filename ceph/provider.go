@@ -24,7 +24,7 @@ func Provider() *schema.Provider {
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
-			"ceph_mon":      resourceCephMon(),
+			//"ceph_mon":      resourceCephMon(),
 			"ceph_pool":     resourceCephPool(),
 			"ceph_volume":   resourceCephVolume(),
 			"ceph_snapshot": resourceCephSnapshot(),

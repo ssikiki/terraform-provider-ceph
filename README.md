@@ -62,19 +62,6 @@ provider "ceph" {
 ```
 You can also set the cluster in the CEPH_CLUSTER environment variable.
 
-define ceph mon:
-```hcl
-resource "ceph_mon" "mon-ceph" {
-  mons = [
-    {host: "10.248.248.68", port: "6789"},
-    {host: "10.248.248.72", port: "6789"},
-    {host: "10.248.248.76", port: "6789"},
-  ]
-  # optional, default is "ceph"
-  cluster = "ceph"
-}
-```
-
 define a ceph pool: pool
 ```hcl
 resource "ceph_pool" "pool_test" {
@@ -91,7 +78,7 @@ resource "ceph_volume" "vol_test" {
   # required
   name = "vol1"
   # required
-  pool = ceph_pool.pool_test.id
+  pool_id = ceph_pool.pool_test.id
   # optional, conflicts with base_snapshot
   size = 1073741824
 }
@@ -115,7 +102,7 @@ resource "ceph_volume" "vol_test_1" {
   # required
   name = "vol2"
   # required
-  pool = ceph_pool.pool_test.id
+  pool_id = ceph_pool.pool_test.id
   # optional, conflicts with size
   base_snapshot = ceph_snapshot.snapshot_test.id
 }

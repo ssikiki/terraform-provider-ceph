@@ -9,6 +9,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -21,26 +22,28 @@ func resourceCephSnapshot() *schema.Resource {
 		// Exists: resourceCephSnapshotExists,
 		Schema: map[string]*schema.Schema{
 			"name": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
+				Type:         schema.TypeString,
+				Required:     true,
+				ForceNew:     true,
+				ValidateFunc: validation.NoZeroValues,
 			},
 			"base_volume": {
-				Type:        schema.TypeString,
-				Required:    true,
-				ForceNew:    true,
-				Description: "$cluster_name/$pool_name/$volume_name",
+				Type:         schema.TypeString,
+				Required:     true,
+				ForceNew:     true,
+				Description:  "$cluster_name/$pool_name/$volume_name",
+				ValidateFunc: validation.NoZeroValues,
 			},
 			"protect": {
 				Type:     schema.TypeBool,
 				Optional: true,
 				Computed: true,
 			},
-			"rollback_datetime": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Computed: true,
-			},
+			//"rollback_datetime": {
+			//	Type:     schema.TypeString,
+			//	Optional: true,
+			//	Computed: true,
+			//},
 		},
 		Importer: &schema.ResourceImporter{
 			StateContext: schema.ImportStatePassthroughContext,
@@ -113,7 +116,6 @@ func resourceCephSnapshotCreate(ctx context.Context, d *schema.ResourceData, met
 	// make sure we record the id even if the rest of this gets interrupted
 	d.Partial(true)
 	d.Set("id", snapPath)
-	d.Set("rollback_datetime", "")
 	//d.SetPartial("id")
 	d.Partial(false)
 
@@ -205,16 +207,16 @@ func resourceCephSnapshotUpdate(ctx context.Context, d *schema.ResourceData, met
 		//d.SetPartial("protect")
 	}
 
-	if d.HasChange("rollback_datetime") {
-		if tmp := d.Get("rollback_datetime"); strings.TrimSpace(tmp.(string)) != "" {
-			log.Infof("rollback snapshot '%s' ...", d.Id())
-			if err = snapshot.Rollback(); err != nil {
-				return diag.Errorf("cluster %s %v", cluster, err)
-			}
-			log.Infof("rollback snapshot '%s' finished", d.Id())
-		}
-		//d.SetPartial("rollback")
-	}
+	//if d.HasChange("rollback_datetime") {
+	//	if tmp := d.Get("rollback_datetime"); strings.TrimSpace(tmp.(string)) != "" {
+	//		log.Infof("rollback snapshot '%s' ...", d.Id())
+	//		if err = snapshot.Rollback(); err != nil {
+	//			return diag.Errorf("cluster %s %v", cluster, err)
+	//		}
+	//		log.Infof("rollback snapshot '%s' finished", d.Id())
+	//	}
+	//	//d.SetPartial("rollback")
+	//}
 
 	d.Partial(false)
 

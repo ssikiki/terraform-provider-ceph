@@ -9,6 +9,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -20,16 +21,18 @@ func resourceCephVolume() *schema.Resource {
 		UpdateContext: resourceCephVolumeUpdate,
 		//Exists: resourceCephVolumeExists,
 		Schema: map[string]*schema.Schema{
-			"pool": {
-				Type:        schema.TypeString,
-				Required:    true,
-				ForceNew:    true,
-				Description: "$cluster_name/$pool_name",
+			"pool_id": {
+				Type:         schema.TypeString,
+				Required:     true,
+				ForceNew:     true,
+				Description:  "$cluster_name/$pool_name",
+				ValidateFunc: validation.NoZeroValues,
 			},
 			"name": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
+				Type:         schema.TypeString,
+				Required:     true,
+				ForceNew:     true,
+				ValidateFunc: validation.NoZeroValues,
 			},
 			"size": {
 				Type:     schema.TypeInt,
@@ -44,6 +47,11 @@ func resourceCephVolume() *schema.Resource {
 				ConflictsWith: []string{"size"},
 				Description:   "$cluster_name/$pool_name/$volume_name@$snapshot_name",
 			},
+			"rollback_snapshot_name": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  "",
+			},
 		},
 		Importer: &schema.ResourceImporter{
 			StateContext: schema.ImportStatePassthroughContext,
@@ -53,7 +61,7 @@ func resourceCephVolume() *schema.Resource {
 
 func resourceCephVolumeCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) (diags diag.Diagnostics) {
 	log.Debugf("create resource ceph_volume")
-	path := strings.Split(d.Get("pool").(string), "/")
+	path := strings.Split(d.Get("pool_id").(string), "/")
 	if len(path) != 2 {
 		return diag.Errorf("invalid format, correct: {cluster_name}/{pool_name}")
 	}
@@ -159,7 +167,7 @@ func resourceCephVolumeRead(ctx context.Context, d *schema.ResourceData, meta in
 	}
 	defer volume.Close()
 
-	d.Set("pool", fmt.Sprintf("%s/%s", cluster, poolName))
+	d.Set("pool_id", fmt.Sprintf("%s/%s", cluster, poolName))
 	d.Set("name", volumeName)
 
 	//size, err := volume.GetSize()
@@ -174,6 +182,14 @@ func resourceCephVolumeRead(ctx context.Context, d *schema.ResourceData, meta in
 	}
 	log.Infof("%s get parent: %s", d.Id(), parent)
 	d.Set("base_snapshot", parent)
+
+	size, err := volume.GetSize()
+	if err != nil {
+		return diag.Errorf("%s get size failed: %v", d.Id(), err)
+	}
+	d.Set("size", size)
+
+	//d.Set("rollback_snapshot_name", "")
 	return nil
 }
 
@@ -208,6 +224,24 @@ func resourceCephVolumeUpdate(ctx context.Context, d *schema.ResourceData, meta 
 			if err = volume.Flatten(); err != nil {
 				return diag.Errorf("cluster %s %v", cluster, err)
 			}
+		}
+	}
+
+	if d.HasChange("rollback_snapshot_name") {
+		snapName := d.Get("rollback_snapshot_name").(string)
+		if snapName != "" {
+			snapshot, err := volume.LookupSnapByName(snapName)
+			if err != nil {
+				return diag.FromErr(err)
+			} else if snapshot == nil {
+				return diag.Errorf("snapshot '%s@%s' not exists", d.Id(), snapName)
+			}
+
+			log.Infof("rollback snapshot '%s@%s' ...", d.Id(), snapName)
+			if err = snapshot.Rollback(); err != nil {
+				return diag.Errorf("rollback snapshot '%s@%s' failed: %s", d.Id(), snapName, err.Error())
+			}
+			log.Infof("rollback snapshot '%s@%s' finished", d.Id(), snapName)
 		}
 	}
 

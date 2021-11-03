@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"terraform-provider-ceph/ceph/helper/mutexkv"
+	"terraform-provider-ceph/ceph/helper/utils"
 
 	"github.com/ceph/go-ceph/rados"
 	"github.com/ceph/go-ceph/rbd"
@@ -381,4 +382,63 @@ func (c *CephClient) DeletePool(name string) error {
 		return nil
 	}
 	return err
+}
+
+type StoragePoolInfo struct {
+	Capacity   uint64
+	Allocation uint64
+	Available  uint64
+	State      int
+	StateDp    string
+}
+
+func (c *CephClient) GetInfo(poolName string) (ret *StoragePoolInfo, err error) {
+	command, _ := json.Marshal(map[string]string{"prefix": "df", "format": "json"})
+	buf, _, err := c.Conn.MonCommand(command)
+	if err != nil {
+		return nil, fmt.Errorf("storagepool %s get info failed: %v", poolName, err)
+	}
+
+	ret = &StoragePoolInfo{}
+	var hasPool bool
+	var percentUsed float64
+	var pools []map[string]interface{}
+	utils.GetValFromJson(buf, "pools").ToVal(&pools)
+	for _, pool := range pools {
+		if pool["name"] == poolName {
+			stats := pool["stats"].(map[string]interface{})
+			if tmp, ok := stats["percent_used"]; ok {
+				percentUsed = tmp.(float64)
+				if percentUsed > 1 {
+					//ceph >= v12 版本存在percent_used字段
+					//ceph v12 percent_used字段 > 1
+					//ceph v15 percent_used字段 < 1 统一按<1处理
+					percentUsed = percentUsed / 100
+				}
+			} else {
+				percentUsed = stats["bytes_used"].(float64) / (stats["bytes_used"].(float64) + stats["max_avail"].(float64))
+			}
+			ret.Allocation = uint64(stats["bytes_used"].(float64))
+			ret.Available = uint64(stats["max_avail"].(float64))
+			ret.Capacity = uint64(stats["bytes_used"].(float64) / percentUsed)
+			hasPool = true
+			break
+		}
+	}
+	if !hasPool {
+		return nil, fmt.Errorf("storagepool %s doesn't exist", poolName)
+	}
+
+	command, _ = utils.JsonMarshal(map[string]string{"prefix": "status", "format": "json"})
+	buf, _, err = c.Conn.MonCommand(command)
+	if err == nil {
+		ret.StateDp = utils.GetValFromJson(buf, "health", "status").ToString()
+		if ret.StateDp == "" {
+			ret.StateDp = utils.GetValFromJson(buf, "health", "overall_status").ToString()
+		}
+		if ret.StateDp == "HEALTH_OK" {
+			ret.State = 2
+		}
+	}
+	return ret, nil
 }

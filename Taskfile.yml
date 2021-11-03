@@ -3,7 +3,7 @@
 version: '3'
 
 vars:
-  PLUGIN_VERSION: 0.3.1
+  PLUGIN_VERSION: 0.3.3
   OUTPUT_FILENAME: terraform-provider-ceph
   LDFLAGS: -X main.version=$(git describe --always --abbrev=40 --dirty)
   #TAGS: -tags luminous

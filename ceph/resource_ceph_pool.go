@@ -7,6 +7,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -25,9 +26,35 @@ func resourceCephPool() *schema.Resource {
 			},
 			// pool name
 			"name": {
+				Type:         schema.TypeString,
+				Required:     true,
+				ForceNew:     true,
+				ValidateFunc: validation.NoZeroValues,
+			},
+			"capacity": {
+				Type:     schema.TypeInt,
+				Optional: true,
+				Computed: true,
+			},
+			"allocation": {
+				Type:     schema.TypeInt,
+				Optional: true,
+				Computed: true,
+			},
+			"available": {
+				Type:     schema.TypeInt,
+				Optional: true,
+				Computed: true,
+			},
+			"active": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				Computed: true,
+			},
+			"state": {
 				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
+				Optional: true,
+				Computed: true,
 			},
 		},
 		Importer: &schema.ResourceImporter{
@@ -93,8 +120,18 @@ func resourceCephPoolRead(ctx context.Context, d *schema.ResourceData, meta inte
 		return nil
 	}
 
-	d.Set("name", poolName)
-	d.Set("cluster", cluster)
+	poolInfo, err := client.GetInfo(poolName)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	_ = d.Set("name", poolName)
+	_ = d.Set("cluster", cluster)
+	_ = d.Set("capacity", poolInfo.Capacity)
+	_ = d.Set("allocation", poolInfo.Allocation)
+	_ = d.Set("available", poolInfo.Available)
+	_ = d.Set("active", poolInfo.StateDp == "HEALTH_OK")
+	_ = d.Set("state", poolInfo.StateDp)
 	return nil
 }
 
